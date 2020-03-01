@@ -1,2 +1,2 @@
 # phonespell
-Spell Words with Phone Number
+Spell Words with a Phone Number

@@ -1,0 +1,29 @@
+{
+  "name": "pendenga/phonespell",
+  "description": "Spell Words with a Phone Number",
+  "minimum-stability": "beta",
+  "license": "none",
+  "authors": [
+    {
+      "name": "Grant Anderson",
+      "email": "pendenga@gmail.com"
+    }
+  ],
+  "require": {
+    "php": "^7.1",
+    "psr/log": "^1.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "Pendenga\\PhoneSpell\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Pendenga\\PhoneSpell\\Test\\": "test/"
+    }
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.0"
+  }
+}
