@@ -220,6 +220,18 @@ class PhoneSpell
     }
 
     /**
+     * This should do one final analysis on the words to determine the most desirable results
+     * - Words with longer phrases of letters, with less numbers interspersed should be first.
+     * - Words with more letters should be first.
+     * @param array $words
+     * @return array
+     */
+    public function finalOrdering(array $words) {
+        // TODO: come up with sorting algorithm
+        return $words;
+    }
+
+    /**
      * @param WordListFactory $factory
      * @param LoggerInterface $logger
      * @return static
@@ -269,8 +281,10 @@ class PhoneSpell
 
         return $this->restoreOriginalNumbers(
             $phone_number,
-            $this->combineWordsAndOrder(
-                $this->decodeFindingsRaw($phone_number, $words)
+            $this->finalOrdering(
+                $this->combineWordsAndOrder(
+                    $this->decodeFindingsRaw($phone_number, $words)
+                )
             ),
             '%d'
         );
