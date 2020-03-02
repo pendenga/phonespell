@@ -3,6 +3,7 @@
 namespace Pendenga\PhoneSpell\Test;
 
 use Pendenga\PhoneSpell\BinarySearch;
+use Pendenga\PhoneSpell\WordListFilter;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -70,7 +71,7 @@ class BinarySearchTest extends TestCase
     {
         $logger = new CountLogger();
         $bs = new BinarySearch($logger);
-        $this->assertEquals($expected, $bs->binarySearch($word, self::WORD_LIST, $bs->startsWithClosure()));
+        $this->assertEquals($expected, $bs->binarySearch($word, self::WORD_LIST, WordListFilter::boolStartsWithBool()));
         $this->assertEquals($count, $logger->debug['binary search']);
     }
 

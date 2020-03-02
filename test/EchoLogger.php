@@ -8,7 +8,7 @@ use Psr\Log\AbstractLogger;
  * Class EchoLogger
  * @package Gpsi\Portal\Test\Mock
  */
-class EchoLogger extends CountLogger
+class EchoLogger extends AbstractLogger
 {
     /**
      * @var array

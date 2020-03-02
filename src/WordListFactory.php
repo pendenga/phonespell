@@ -41,16 +41,24 @@ class WordListFactory
     }
 
     /**
-     * @return WordList
+     * @return WordListFilter
      */
     public function make()
     {
-        return new WordList($this->dictionary->words(), $this->logger);
+        return new WordListFilter($this->dictionary->words(), $this->logger);
+    }
+
+    /**
+     * @return WordListFilter
+     */
+    public function makeFilter()
+    {
+        return new WordListFilter($this->dictionary->words(), $this->logger);
     }
 
     /**
      * @param $num
-     * @return WordList
+     * @return WordListFilter
      * @throws PhoneSpellException
      */
     public function makeByNum($num)
@@ -58,6 +66,18 @@ class WordListFactory
         $this->dictionary->setWordListByNum($num);
 
         return $this->make();
+    }
+
+    /**
+     * @param $num
+     * @return WordListFilter
+     * @throws PhoneSpellException
+     */
+    public function makeFilterByNum($num)
+    {
+        $this->dictionary->setWordListByNum($num);
+
+        return $this->makeFilter();
     }
 
     // /**

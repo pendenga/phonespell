@@ -13,7 +13,7 @@ class WordList extends BinarySearch implements WordListInterface
     /**
      * @var array
      */
-    private $static_word_list;
+    protected $static_word_list;
 
     /**
      * WordList constructor.
@@ -29,26 +29,26 @@ class WordList extends BinarySearch implements WordListInterface
     /**
      * @inheritDoc
      */
-    public function count() {
-        return count($this->static_word_list);
-    }
-
-    /**
-     * @inheritDoc
-     */
-    public function hasStartsWith($word)
+    public function containsStartsWith($word)
     {
         $this->logger->debug('incr', ['key' => 'starts with cmp']);
-        return $this->binarySearch($word, $this->static_word_list, $this->startsWithClosure());
+        return $this->binarySearch($word, $this->words(), WordListFilter::boolStartsWithBool());
     }
 
     /**
      * @inheritDoc
      */
-    public function hasWord($word)
+    public function containsWord($word)
     {
-        $this->logger->debug('incr', ['key' => 'hasWord cmp']);
-        return $this->binarySearch($word, $this->static_word_list);
+        $this->logger->debug('incr', ['key' => 'containsWord cmp']);
+        return $this->binarySearch($word, $this->words());
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function count() {
+        return count($this->words());
     }
 
     /**

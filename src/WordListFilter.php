@@ -8,14 +8,9 @@ use Psr\Log\LoggerAwareTrait;
  * Class WordListFilter
  * @package Pendenga\PhoneSpell
  */
-class WordListFilter extends BinarySearch
+class WordListFilter extends WordList implements WordListFilterInterface
 {
     use LoggerAwareTrait;
-
-    /**
-     * @var array
-     */
-    static $static_word_list;
 
     /**
      * @var array
@@ -23,10 +18,27 @@ class WordListFilter extends BinarySearch
     protected $temp_word_list;
 
     /**
+     * @param     $word
+     * @param int $min
+     * @param int $max
+     * @return bool
+     */
+    public static function boolByLength($word, $min, $max) {
+        return (strlen($word) <= $max && strlen($word) >= $min);
+    }
+
+    /**
      * @inheritDoc
      */
-    public function count() {
-        return count($this->temp_word_list);
+    public static function boolStartsWith($haystack, $needle) {
+        return stripos($haystack, $needle) === 0;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public static function boolEndsWith($haystack, $needle) {
+        return stripos($haystack, $needle) === strlen($haystack) - strlen($needle);
     }
 
     /**
@@ -35,9 +47,7 @@ class WordListFilter extends BinarySearch
     public function filter(\Closure $bool_closure)
     {
         $this->load();
-        $this->logger->info(' length: ' . count($this->temp_word_list));
         $this->temp_word_list = array_filter($this->temp_word_list, $bool_closure);
-        $this->logger->info(' length: ' . count($this->temp_word_list));
 
         return $this;
     }
@@ -45,20 +55,11 @@ class WordListFilter extends BinarySearch
     /**
      * @inheritDoc
      */
-    public function filterByEndsWith($word)
+    public function filterEndsWith($word)
     {
-        return $this;
-    }
-
-    /**
-     * @inheritDoc
-     */
-    public function filterByLength($min = 1, $max = 12)
-    {
-        $this->logger->info("filtering words between {$min} and {$max}");
-        $that = $this;
-        $wrapper = function ($word) use ($that, $min, $max) {
-            return $that->testByLength($word, $min, $max);
+        $this->logger->info("filtering words ending with {$word}");
+        $wrapper = function ($list_word) use ($word) {
+            return self::boolEndsWith($list_word, $word);
         };
 
         return $this->filter($wrapper);
@@ -67,12 +68,11 @@ class WordListFilter extends BinarySearch
     /**
      * @inheritDoc
      */
-    public function filterByStartsWith($word)
+    public function filterLength($min = 1, $max = 12)
     {
         $this->logger->info("filtering words between {$min} and {$max}");
-        $that = $this;
-        $wrapper = function ($word) use ($that, $min, $max) {
-            return $that->testByLength($word, $min, $max);
+        $wrapper = function ($word) use ($min, $max) {
+            return self::boolByLength($word, $min, $max);
         };
 
         return $this->filter($wrapper);
@@ -81,12 +81,14 @@ class WordListFilter extends BinarySearch
     /**
      * @inheritDoc
      */
-    public function hasWord($word)
+    public function filterStartsWith($word)
     {
-        $this->load();
-        $this->logger->debug('incr', ['key' => 'hasWord cmp']);
-        $this->logger->debug("{$word} has word? " . current($this->temp_word_list));
-        return $this->binarySearch($word, $this->temp_word_list);
+        $this->logger->info("filtering words starting with {$word}");
+        $wrapper = function ($list_word) use ($word) {
+            return self::boolStartsWith($list_word, $word);
+        };
+
+        return $this->filter($wrapper);
     }
 
     /**
@@ -108,19 +110,9 @@ class WordListFilter extends BinarySearch
     {
         $this->logger->info("loading words from static list");
         $this->logger->debug('incr', ['key' => 'reset word list']);
-        $this->temp_word_list = self::$static_word_list;
+        $this->temp_word_list = $this->static_word_list;
 
         return $this;
-    }
-
-    /**
-     * @param     $word
-     * @param int $min
-     * @param int $max
-     * @return bool
-     */
-    public function testByLength($word, $min, $max) {
-        return (strlen($word) <= $max && strlen($word) >= $min);
     }
 
     /**

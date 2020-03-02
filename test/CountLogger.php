@@ -2,7 +2,6 @@
 
 namespace Pendenga\PhoneSpell\Test;
 
-use Psr\Log\AbstractLogger;
 use Psr\Log\NullLogger;
 
 /**

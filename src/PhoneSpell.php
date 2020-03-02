@@ -58,7 +58,7 @@ class PhoneSpell
     protected $factory;
 
     /**
-     * @var WordList[]
+     * @var WordListFilter[]
      */
     protected $word_lists;
 
@@ -68,7 +68,6 @@ class PhoneSpell
     protected $word_length;
     protected $global_prefix = '';
     protected $raw_findings = [];
-    protected $raw_results = [];
 
     /**
      * PhoneSpell constructor.
@@ -84,77 +83,60 @@ class PhoneSpell
     /**
      * @param      $word
      * @param null $start
-     * @return $this
+     * @return array
      */
     public function allPermutations($word, $start = null)
     {
         $this->word_length = strlen($word);
+        $output = [];
 
         // $this->logger->debug(__METHOD__ . " with start: {$word} ({$start})");
         if (strlen($word) == 1) {
             foreach (self::letterOptions($word) as $letter) {
                 $full_word = $start . $letter;
-                $this->found($full_word);
-                // if ($this->word_list->hasWord($full_word)) {
-                //     $this->raw_findings[] = $full_word;
-                // }
+                $output[] = $full_word;
             }
         } else {
             $first = current(str_split($word));
             foreach (self::letterOptions($first) as $letter) {
                 $rest = substr($word, 1, strlen($word));
                 $partial_word = $start . $letter;
-                // if ($this->word_list->hasWord($partial_word)) {
-                //     $this->raw_findings[] = $partial_word;
-                // }
-                self::allPermutations($rest, $partial_word);
+                $output = array_merge($output, self::allPermutations($rest, $partial_word));
             }
         }
 
-        return $this;
+        return $output;
     }
 
     /**
-     * @inheritDoc
-     */
-    public function count()
-    {
-        return [
-            'finding' => count($this->raw_findings),
-            'results' => count($this->raw_results),
-        ];
-    }
-
-    /**
-     * @param $original_word
+     * $findings is words from the dictionary.
+     * This converts any letter replacements back into the characters found in the phone number.
+     * @param string $phone_number
+     * @param array  $findings
      * @return array
      */
-    public function decodeFindings($original_word)
+    public function decodeFindingsRaw($phone_number, array $findings)
     {
-        $original = str_split($original_word);
+        $original = str_split($phone_number);
         $output = [];
-        $combined = [];
-        foreach ($this->raw_findings as $found) {
+        foreach ($findings as $found) {
             try {
-                $new_word = ['word' => null, 'partial' => null, 'pre' => null, 'post' => null];
+                $new_word = null;
                 foreach (str_split($found) as $i => $letter) {
                     if ($letter == '*') {
-                        $new_word['word'] .= '*';
+                        $new_word .= '*';
                         continue;
                     }
                     if (in_array($letter, self::PHONE[$original[$i]])) {
-                        $new_word['word'] .= $letter;
-                        $new_word['partial'] .= $letter;
+                        $new_word .= $letter;
                         continue;
                     }
                     if (isset(self::LETTER_REPL[$original[$i]])) {
                         if (in_array($letter, self::LETTER_REPL[$original[$i]])) {
-                            $new_word['word'] .= $original[$i];
-                            $new_word['partial'] .= $original[$i];
+                            $new_word .= $original[$i];
                             continue;
                         } elseif (in_array(strtoupper($letter), self::LETTER_REPL[$original[$i]])) {
-                            $new_word['word'] .= $original[$i];
-                            $new_word['partial'] .= $original[$i];
+                            $new_word .= $original[$i];
                             continue;
                         }
                     }
@@ -162,8 +144,7 @@ class PhoneSpell
                     if (isset(self::LETTER_REPL[$letter])) {
                         foreach (self::LETTER_REPL[$letter] as $repl) {
                             if (in_array(strtolower($repl), self::PHONE[$original[$i]])) {
-                                $new_word['word'] .= $repl;
-                                $new_word['partial'] .= $repl;
+                                $new_word .= $repl;
                                 continue;
                             }
                         }
@@ -171,23 +152,43 @@ class PhoneSpell
                     throw new PhoneSpellException('letter not decoded ' . $letter . ' in ' . $found);
                 }
 
-                if (preg_match("/([*]*)[^*]*([*]*)/", $found, $matches)) {
-                    $new_word['pre'] = $matches[1];
-                    $new_word['post'] = $matches[2];
-                }
-                $new_word['score'] = pow(2, strlen($new_word['partial'])) -
-                                     strlen($new_word['pre']) -
-                                     strlen($new_word['post']);
                 $output[] = $new_word;
-                $combined[] = ['word' => $new_word['word'], 'score' => $new_word['score']];
             } catch (PhoneSpellException $e) {
                 $this->logger->error($e->getMessage());
             }
         }
 
+        return $output;
+    }
+
+    /**
+     * From raw findings, combine words and order the whole list by score
+     * @param array $findings
+     * @return array
+     */
+    public function combineWordsAndOrder(array $findings)
+    {
+        $tmp_meta = [];
+        $scored = [];
+
+        // add temporary metadata and scores to each word
+        foreach ($findings as $found) {
+            $new_row = ['word' => $found];
+            if (preg_match("/([*]*)([^*]*)([*]*)/", $found, $matches)) {
+                $new_row['pre'] = $matches[1];
+                $new_row['partial'] = $matches[2];
+                $new_row['post'] = $matches[3];
+            }
+            $score = pow(2, strlen($new_row['partial'])) -
+                     strlen($new_row['pre']) -
+                     strlen($new_row['post']);
+            $tmp_meta[] = $new_row;
+            $scored[$score][] = $new_row['word'];
+        }
+
         // try to combine words...
-        foreach ($output as $foo) {
-            foreach ($output as $bar) {
+        foreach ($tmp_meta as $foo) {
+            foreach ($tmp_meta as $bar) {
                 if ($foo['word'] == $bar['word']) {
                     continue;
                 }
@@ -195,70 +196,27 @@ class PhoneSpell
                     continue;
                 }
                 if (strlen($foo['pre']) + strlen($foo['partial']) <= strlen($bar['pre'])) {
-                    $try = str_pad($foo['pre'] . $foo['partial'], strlen($bar['pre']), '*') .
-                           $bar['partial'] .
-                           $bar['post'];
-                    $combined[] = [
-                        'word'  => $try,
-                        'score' => pow(2, strlen($foo['partial'])) +
-                                   pow(2, strlen($bar['partial'])) -
-                                   strlen($foo['pre']) -
-                                   strlen($bar['post']),
-                    ];
+                    $new_word = str_pad($foo['pre'] . $foo['partial'], strlen($bar['pre']), '*') .
+                                $bar['partial'] .
+                                $bar['post'];
+
+                    $score = pow(2, strlen($foo['partial'])) + pow(2, strlen($bar['partial'])) -
+                             strlen($foo['pre']) -
+                             strlen($bar['post']);
+                    $scored[$score][] = $new_word;
                     continue;
                 }
             }
         }
-
-        // fill in the blanks with original numbers
-        $scored = [];
-        foreach ($combined as $found) {
-            $found_array = str_split($found['word']);
-            foreach ($found_array as $i => &$letter) {
-                if ($letter == '*') {
-                    $letter = '[' . $original[$i] . ']';
-                }
-            }
-            $scored[$found['score']][] = implode($found_array);
-        }
         krsort($scored);
 
-        $this->raw_results = [];
+        // flatten scored array of arrays
+        $output = [];
         foreach ($scored as $score => $set) {
-            $this->raw_results = array_merge($this->raw_results, $set);
+            $output = array_merge($output, $set);
         }
-    }
 
-    /**
-     * @return array
-     */
-    public function findings()
-    {
-        return $this->raw_findings;
-    }
-
-    /**
-     * @param $word
-     * @return $this
-     */
-    public function found($word)
-    {
-        $this->logger->debug('found full word: ' . $this->global_prefix . $word);
-        $this->raw_findings[] = $this->global_prefix . $word;
-
-        return $this;
-    }
-
-    /**
-     * @param $word
-     * @return $this
-     */
-    public function foundPartial($word)
-    {
-        $this->logger->debug('found partial ' . $this->global_prefix . str_pad($word, $this->word_length, '*'));
-        $this->raw_findings[] = $this->global_prefix . str_pad($word, $this->word_length, '*');
-
-        return $this;
+        return $output;
     }
 
     /**
@@ -296,13 +254,38 @@ class PhoneSpell
     }
 
     /**
+     * @param $phone_number
+     * @return array
+     */
+    public function lookForAllWords($phone_number)
+    {
+        $words = [];
+        for ($i = 0; $i < strlen($phone_number); $i++) {
+            $new_phone_string = substr_replace($phone_number, str_repeat('*', $i), 0, $i);
+            $this->logger->info("The start word was " . $new_phone_string);
+            $new_words = $this->lookForWords($new_phone_string);
+            $words = array_merge($words, $new_words);
+        }
+
+        return $this->restoreOriginalNumbers(
+            $phone_number,
+            $this->combineWordsAndOrder(
+                $this->decodeFindingsRaw($phone_number, $words)
+            ),
+            '%d'
+        );
+    }
+
+    /**
      * @param      $word
      * @param null $start
-     * @return $this
+     * @return array
      */
     public function lookForWords($word, $start = null, $max_length = null)
     {
+        $output = [];
         $this->logger->debug('look for words ' . $start . ' (' . $word . ')');
+
         // set only the first time (recursive)
         if (is_null($max_length)) {
             if (preg_match('/^([*]+)(\d+)$/', $word, $matches)) {
@@ -314,15 +297,14 @@ class PhoneSpell
             $this->word_length = $max_length = strlen($word);
         }
 
-        // $this->logger->debug(__METHOD__ . " with start: {$word} ({$start})");
         // last letter to add to word (don't recurse)
         if (strlen($word) == 1) {
             foreach (self::letterOptions($word) as $letter) {
                 $full_word = $start . $letter;
                 $word_len = strlen($full_word);
                 try {
-                    if ($this->wordList($word_len)->hasWord($full_word)) {
-                        $this->found($full_word);
+                    if ($this->wordList($word_len)->containsWord($full_word)) {
+                        $output[] = $this->global_prefix . $full_word;
                     }
                 } catch (PhoneSpellException $e) {
                     $this->logger->error($e->getMessage());
@@ -335,8 +317,8 @@ class PhoneSpell
                 $partial_word = $start . $letter;
                 $word_len = strlen($partial_word);
                 try {
-                    if ($this->wordList($word_len)->hasWord($partial_word)) {
-                        $this->foundPartial($partial_word);
+                    if ($this->wordList($word_len)->containsWord($partial_word)) {
+                        $output[] = $this->global_prefix . str_pad($partial_word, $this->word_length, '*');
                     }
                 } catch (PhoneSpellException $e) {
                     $this->logger->error($e->getMessage());
@@ -344,15 +326,15 @@ class PhoneSpell
 
                 // if first letter, just recurse. Don't check for matching longer words and save it
                 if ($word_len == 1) {
-                    self::lookForWords($rest, $partial_word, $this->word_length);
+                    $output = array_merge($output, self::lookForWords($rest, $partial_word, $this->word_length));
                 } else {
                     // test longer words if they start with these letters... if not, don't recurse
                     for ($i = $max_length; $i > $word_len; $i--) {
                         try {
-                            if ($this->wordList($i)->hasStartsWith($partial_word)) {
+                            if ($this->wordList($i)->containsStartsWith($partial_word)) {
                                 // only recurse if we have a potential full word match (longest only)
                                 $this->logger->debug('look for more words ' . $rest . ' ' . $partial_word . ' ' . $i);
-                                self::lookForWords($rest, $partial_word, $i);
+                                $output = array_merge($output, self::lookForWords($rest, $partial_word, $i));
                                 break;
                             }
                         } catch (PhoneSpellException $e) {
@@ -363,20 +345,38 @@ class PhoneSpell
             }
         }
 
-        return $this;
+        return $output;
     }
 
     /**
+     * @param string $phone_number
+     * @param array  $findings
+     * @param string $pattern
      * @return array
      */
-    public function results()
+    public function restoreOriginalNumbers($phone_number, array $findings, $pattern = '[%d]')
     {
-        return $this->raw_results;
+        $original = str_split($phone_number);
+        $output = [];
+
+        // fill in the blanks with original numbers
+        foreach ($findings as $found) {
+            $found_array = str_split($found);
+            foreach ($found_array as $i => &$letter) {
+                if ($letter == '*') {
+                    $letter = sprintf($pattern, $original[$i]);
+                    //$letter = '[' . $original[$i] . ']';
+                }
+            }
+            $output[] = implode($found_array);
+        }
+
+        return $output;
     }
 
     /**
      * @param int $num
-     * @return WordList
+     * @return WordListFilter
      * @throws PhoneSpellException
      */
     private function wordList(int $num)

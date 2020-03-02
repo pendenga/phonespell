@@ -28,23 +28,6 @@ class BinarySearch
     }
 
     /**
-     * Do a strcmp-style comparison, but match on partial starts-with string
-     * Usage: $this->binarySearch($word, [WORD_LIST], $this->startsWith())
-     * @return \Closure
-     */
-    public function startsWithClosure() {
-        return function($needle, $haystack) {
-            if (stripos($haystack, $needle) === 0) {
-                if (strcmp($needle, $haystack) === 0) {
-                    return -1;
-                }
-                return 0;
-            }
-            return strcmp($needle, $haystack);
-        };
-    }
-
-    /**
      * @param $needle
      * @param array $haystack
      * @param $compare
@@ -84,5 +67,22 @@ class BinarySearch
             }
         }
         return $key;
+    }
+
+    /**
+     * Do a strcmp-style comparison, but match on partial starts-with string
+     * Usage: $this->binarySearch($word, [WORD_LIST], $this->startsWith())
+     * @return \Closure
+     */
+    public function boolStartsWithBool() {
+        return function($needle, $haystack) {
+            if (stripos($haystack, $needle) === 0) {
+                if (strcmp($needle, $haystack) === 0) {
+                    return -1;
+                }
+                return 0;
+            }
+            return strcmp($needle, $haystack);
+        };
     }
 }
